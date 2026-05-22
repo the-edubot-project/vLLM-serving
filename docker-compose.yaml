@@ -1,0 +1,58 @@
+services:
+
+  # ── LLM: Gemma 4 26B en GPU 0 + GPU 1 (RTX 4000 Ada, 20 GB cada una) ──────
+  # tensor-parallel-size 2 → 40 GB combinados permiten fp8 (~26 GB de pesos) y
+  # dejan ~14 GB libres para KV-cache con ventana de 32 K tokens.
+  # vLLM usa continuous batching: gestiona internamente todas las peticiones
+  # concurrentes, maximizando la utilización de ambas GPUs simultáneamente.
+  #
+  # Si el modelo NO carga con fp8 (algunos pesos no compatibles), cambia a:
+  #   --dtype bfloat16  (requiere las dos GPUs por tamaño, tp=2 obligatorio)
+  # Si quieres dos instancias independientes (necesita cuantización int4/AWQ):
+  #   duplica este servicio, usa device_ids: ["0"] / ["1"] y ports 8000/8001
+  # ──────────────────────────────────────────────────────────────────────────
+  vllm-llm:
+    build:
+      context: .
+      dockerfile: Dockerfile.vLLM
+    command:
+      - google/gemma-4-26B-A4B
+      - --served-model-name
+      - gemma-4-26b
+      - --port
+      - "8000"
+      - --tensor-parallel-size
+      - "2"
+      - --quantization
+      - fp8
+      - --gpu-memory-utilization
+      - "0.90"
+      - --max-model-len
+      - "16384"
+      - --max-num-seqs
+      - "16"
+      - --max-num-batched-tokens
+      - "4096"
+      - --enforce-eager
+      - --trust-remote-code
+    ports:
+      - "8003:8000"
+    volumes:
+      - /home/aiteam/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0", "1"]
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 300s
+    restart: unless-stopped
+
