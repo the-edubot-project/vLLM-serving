@@ -33,7 +33,7 @@ services:
       - "16"
       - --max-num-batched-tokens
       - "4096"
-      - --enforce-eager
+      # - --enforce-eager
       - --trust-remote-code
     ports:
       - "8003:8000"
