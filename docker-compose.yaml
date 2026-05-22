@@ -16,7 +16,7 @@ services:
       context: .
       dockerfile: Dockerfile.vLLM
     command:
-      - google/gemma-4-26B-A4B
+      - google/gemma-4-26B-A4B-it
       - --served-model-name
       - gemma-4-26b
       - --port
