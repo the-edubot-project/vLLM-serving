@@ -28,11 +28,14 @@ services:
       - --gpu-memory-utilization
       - "0.90"
       - --max-model-len
-      - "16384"
+      - "32768"
       - --max-num-seqs
       - "16"
       - --max-num-batched-tokens
       - "4096"
+      # Con max-num-batched-tokens (4096) < max-model-len (32768) el prefill se
+      # procesa por trozos; lo activamos explícitamente para no depender del default.
+      - --enable-chunked-prefill
       # - --enforce-eager
       - --trust-remote-code
     ports:
