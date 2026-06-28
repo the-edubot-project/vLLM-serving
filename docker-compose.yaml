@@ -39,7 +39,7 @@ services:
       # - --enforce-eager
       - --trust-remote-code
     ports:
-      - "8003:8000"
+      - "8002:8000"
     volumes:
       - /home/aiteam/.cache/huggingface:/root/.cache/huggingface
     environment:
