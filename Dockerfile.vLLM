@@ -1,6 +1,10 @@
-FROM vllm/vllm-openai:latest
+# Fijado a la versión que ya corre en el server (curl localhost:8002/version -> 0.23.0)
+# en vez de :latest, para no arrastrar cambios inesperados al reconstruir.
+FROM vllm/vllm-openai:v0.23.0
 
-# Gemma 4 y otros modelos recientes requieren transformers >= 4.50
+# Gemma 4 y otros modelos recientes requieren transformers >= 4.50.
+# Fijado a la versión que ya corre en el server (pip show transformers -> 5.12.0)
+# en vez de --upgrade, para no arrastrar versiones nuevas en cada rebuild.
 RUN apt-get update && apt-get install -y --no-install-recommends curl git && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir --upgrade transformers
-
+RUN pip install --no-cache-dir transformers==5.12.0
+# RUN pip install --no-cache-dir --upgrade transformers

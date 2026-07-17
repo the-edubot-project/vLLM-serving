@@ -2,7 +2,8 @@ services:
 
   # ── LLM: Gemma 4 26B en GPU 0 + GPU 1 (RTX 4000 Ada, 20 GB cada una) ──────
   # tensor-parallel-size 2 → 40 GB combinados permiten fp8 (~26 GB de pesos) y
-  # dejan ~14 GB libres para KV-cache con ventana de 32 K tokens.
+  # dejan ~14 GB libres para KV-cache. Con --kv-cache-dtype fp8 ese KV rinde el
+  # doble, habilitando ventana de ~48 K tokens (ver --max-model-len abajo).
   # vLLM usa continuous batching: gestiona internamente todas las peticiones
   # concurrentes, maximizando la utilización de ambas GPUs simultáneamente.
   #
@@ -25,16 +26,31 @@ services:
       - "2"
       - --quantization
       - fp8
+      # KV-cache en fp8 (1 byte/token en vez de 2 de bf16): ~MITAD de memoria por
+      # token -> ~DOBLE de capacidad de contexto sin gastar más VRAM. Coste: una
+      # pérdida de precisión pequeña. Es la palanca que permite subir max-model-len.
+      - --kv-cache-dtype
+      - fp8
       - --gpu-memory-utilization
-      - "0.90"
+      - "0.93"
+      # Subido de 32768 -> 49152. Motivo: graphiti tiene HARDCODEADO 16384 tokens de
+      # SALIDA en extract_edges (edge_operations.py:141), y los prompts de resúmenes
+      # grandes llegan a ~16-20K de ENTRADA -> 16384+~20K > 32768 daba HTTP 400.
+      # 49152 deja sitio a 16384 de salida + ~32K de prompt.
+      # ⚠️ NO puede superar el max_position_embeddings nativo del modelo (verificar
+      # en config.json). Si arranca con holgura de KV, puedes probar 65536.
       - --max-model-len
-      - "32768"
+      - "49152"
+      # Bajado de 16 -> 4: con contexto largo cada petición consume mucho más KV.
+      # Menos secuencias concurrentes evita que varias peticiones largas saturen el
+      # pool y se preempten entre sí (sacrificamos paralelismo por fiabilidad).
+      # El exceso de peticiones simplemente hace cola, no falla.
       - --max-num-seqs
-      - "16"
+      - "4"
       - --max-num-batched-tokens
       - "4096"
-      # Con max-num-batched-tokens (4096) < max-model-len (32768) el prefill se
-      # procesa por trozos; lo activamos explícitamente para no depender del default.
+      # Con max-num-batched-tokens (4096) < max-model-len el prefill se procesa por
+      # trozos; lo activamos explícitamente para no depender del default.
       - --enable-chunked-prefill
       # - --enforce-eager
       - --trust-remote-code
