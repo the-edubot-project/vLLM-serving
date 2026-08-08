@@ -75,3 +75,13 @@ services:
       start_period: 300s
     restart: unless-stopped
 
+    networks:
+      - vllm-net
+
+networks:
+  vllm-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.50.0.0/16
+
