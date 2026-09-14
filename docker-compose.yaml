@@ -2,15 +2,12 @@ services:
 
   # ── LLM: Gemma 4 26B en GPU 0 + GPU 1 (RTX 4000 Ada, 20 GB cada una) ──────
   # tensor-parallel-size 2 → 40 GB combinados permiten fp8 (~26 GB de pesos) y
-  # dejan ~14 GB libres para KV-cache. Con --kv-cache-dtype fp8 ese KV rinde el
-  # doble, habilitando ventana de ~48 K tokens (ver --max-model-len abajo).
+  # dejan VRAM libre para KV-cache. Con --kv-cache-dtype fp8 ese KV rinde el
+  # doble, habilitando ventana de ~96 K tokens con 2 secuencias concurrentes.
   # vLLM usa continuous batching: gestiona internamente todas las peticiones
   # concurrentes, maximizando la utilización de ambas GPUs simultáneamente.
   #
-  # Si el modelo NO carga con fp8 (algunos pesos no compatibles), cambia a:
-  #   --dtype bfloat16  (requiere las dos GPUs por tamaño, tp=2 obligatorio)
-  # Si quieres dos instancias independientes (necesita cuantización int4/AWQ):
-  #   duplica este servicio, usa device_ids: ["0"] / ["1"] y ports 8000/8001
+  # Configuración orientada a: 2 usuarios en paralelo con contexto amplio.
   # ──────────────────────────────────────────────────────────────────────────
   vllm-llm:
     build:
@@ -26,34 +23,32 @@ services:
       - "2"
       - --quantization
       - fp8
-      # KV-cache en fp8 (1 byte/token en vez de 2 de bf16): ~MITAD de memoria por
-      # token -> ~DOBLE de capacidad de contexto sin gastar más VRAM. Coste: una
-      # pérdida de precisión pequeña. Es la palanca que permite subir max-model-len.
+      # KV-cache en fp8 (1 byte/token): ~MITAD de memoria por token vs bf16.
+      # Es la palanca principal que permite subir max-model-len sin más VRAM.
       - --kv-cache-dtype
       - fp8
       - --gpu-memory-utilization
       - "0.93"
-      # Subido de 32768 -> 49152. Motivo: graphiti tiene HARDCODEADO 16384 tokens de
-      # SALIDA en extract_edges (edge_operations.py:141), y los prompts de resúmenes
-      # grandes llegan a ~16-20K de ENTRADA -> 16384+~20K > 32768 daba HTTP 400.
-      # 49152 deja sitio a 16384 de salida + ~32K de prompt.
-      # ⚠️ NO puede superar el max_position_embeddings nativo del modelo (verificar
-      # en config.json). Si arranca con holgura de KV, puedes probar 65536.
+      # Subido de 49152 -> 98304. Al bajar max-num-seqs de 4 a 2, cada secuencia
+      # dispone de ~el doble de bloques KV, así que podemos duplicar la ventana.
+      # ⚠️ NO puede superar el max_position_embeddings nativo del modelo
+      # (Gemma 4 soporta hasta 262144, así que 98304 está holgado).
       - --max-model-len
-      - "49152"
-      # Bajado de 16 -> 4: con contexto largo cada petición consume mucho más KV.
-      # Menos secuencias concurrentes evita que varias peticiones largas saturen el
-      # pool y se preempten entre sí (sacrificamos paralelismo por fiabilidad).
-      # El exceso de peticiones simplemente hace cola, no falla.
+      - "131072"
+      # Bajado de 4 -> 2: priorizamos que 2 personas trabajen en paralelo con
+      # contexto amplio. El exceso de peticiones simplemente hace cola.
       - --max-num-seqs
-      - "4"
+      - "2"
       - --max-num-batched-tokens
       - "4096"
-      # Con max-num-batched-tokens (4096) < max-model-len el prefill se procesa por
-      # trozos; lo activamos explícitamente para no depender del default.
+      # Con max-num-batched-tokens (4096) < max-model-len el prefill se procesa
+      # por trozos; lo activamos explícitamente para no depender del default.
       - --enable-chunked-prefill
       # - --enforce-eager
       - --trust-remote-code
+      - --enable-auto-tool-choice
+      - --tool-call-parser
+      - gemma4
     ports:
       - "8002:8000"
     volumes:
@@ -83,4 +78,5 @@ networks:
     ipam:
       config:
         - subnet: 172.50.0.0/16
+
 
