@@ -49,6 +49,19 @@ services:
       - --enable-auto-tool-choice
       - --tool-call-parser
       - gemma4
+      # ── Razonamiento (thinking) ─────────────────────────────────────────────
+      # Gemma 4 emite el razonamiento en un canal propio: <|channel>thought ...
+      # <channel|> respuesta. El reasoning-parser 'gemma4' lo separa y lo expone
+      # en el campo reasoning_content de la API OpenAI, para que opencode lo
+      # muestre como bloque de razonamiento aparte (como con Gemini).
+      - --reasoning-parser
+      - gemma4
+      # Activa el thinking por defecto en TODAS las peticiones (así opencode no
+      # necesita enviar chat_template_kwargs). Si prefieres activarlo por
+      # petición, quita esta línea y manda extra_body={"chat_template_kwargs":
+      # {"enable_thinking": true}} desde el cliente.
+      - --default-chat-template-kwargs
+      - '{"enable_thinking": true}'
     ports:
       - "8002:8000"
     volumes:
