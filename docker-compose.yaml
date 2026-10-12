@@ -15,8 +15,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.vLLM
-      # Memoria compartida dado que son 2 gpus
-      shm_size: "1gb"
+
+    # Memoria compartida para vLLM
+    shm_size: "1gb"
+    
     command:
       - google/gemma-4-26B-A4B-it
       - --served-model-name
